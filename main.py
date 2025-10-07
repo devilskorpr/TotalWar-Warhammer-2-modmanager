@@ -4,9 +4,11 @@ import subprocess
 import flet as ft
 import tkinter as tk
 from tkinter import filedialog
+import zipfile
+import shutil
 
 CONFIG_FILE = "config.json"
-
+STANDARD_PACKS_FILE = "standard_packs.txt"
 
 # ---------------- helpers ----------------
 
@@ -16,11 +18,9 @@ def load_config():
             return json.load(f).get("game_path")
     return None
 
-
 def save_config(path):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump({"game_path": path}, f, indent=4)
-
 
 def select_game_folder():
     root = tk.Tk()
@@ -28,24 +28,34 @@ def select_game_folder():
     path = filedialog.askdirectory(title="Выберите папку с игрой Total War: Warhammer II")
     return path if path else None
 
+def load_standard_packs(file_path=STANDARD_PACKS_FILE):
+    """Список файлов, которые не считаются модами"""
+    if not os.path.exists(file_path):
+        return []
+    with open(file_path, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f.readlines()]
 
 def scan_mods(game_path):
+    """Возвращает список модов (.pack), игнорируя стандартные файлы"""
     data_path = os.path.join(game_path, "data")
     if not os.path.exists(data_path):
         return []
+
+    standard_files = set(load_standard_packs())
     mods = []
     for fname in os.listdir(data_path):
-        if fname.lower().endswith(".pack"):
-            name_no_ext = os.path.splitext(fname)[0]
-            png_path = os.path.join(data_path, name_no_ext + ".png")
-            if os.path.exists(png_path):
-                mods.append((fname, png_path))
+        if not fname.lower().endswith(".pack"):
+            continue
+        if fname in standard_files:
+            continue
+        name_no_ext = os.path.splitext(fname)[0]
+        png_path = os.path.join(data_path, name_no_ext + ".png")
+        mods.append((fname, png_path if os.path.exists(png_path) else None))
     return mods
-
 
 def get_active_mods_set():
     user_script = os.path.expandvars(r"%APPDATA%\The Creative Assembly\Warhammer2\scripts\user.script.txt")
-    active = []
+    active = set()
     if os.path.exists(user_script):
         with open(user_script, "r", encoding="utf-8") as f:
             for line in f:
@@ -53,11 +63,10 @@ def get_active_mods_set():
                 if ln.startswith('mod "') and ln.endswith('";'):
                     try:
                         name = ln.split('"')[1]
-                        active.append(name)
+                        active.add(name)
                     except Exception:
                         continue
     return active
-
 
 def write_user_script_preserve(existing_lines, active_mods_set):
     existing_mod_lines = []
@@ -91,6 +100,34 @@ def write_user_script_preserve(existing_lines, active_mods_set):
 
     return final_lines
 
+def add_pack_file(pack_path, game_path):
+    data_path = os.path.join(game_path, "data")
+    os.makedirs(data_path, exist_ok=True)
+    shutil.copy(pack_path, data_path)
+    # проверяем наличие PNG с таким же именем, если есть рядом с pack - копируем
+    png_candidate = os.path.splitext(pack_path)[0] + ".png"
+    if os.path.exists(png_candidate):
+        shutil.copy(png_candidate, data_path)
+
+def add_zip_archive(zip_path, game_path):
+    data_path = os.path.join(game_path, "data")
+    os.makedirs(data_path, exist_ok=True)
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        for member in zip_ref.namelist():
+            filename = os.path.basename(member)
+            if filename.lower().endswith(".pack") or filename.lower().endswith(".png"):
+                target_path = os.path.join(data_path, filename)
+                with open(target_path, "wb") as f_out:
+                    f_out.write(zip_ref.read(member))
+
+def delete_mod(mod_name, game_path):
+    data_path = os.path.join(game_path, "data")
+    mod_path = os.path.join(data_path, mod_name)
+    png_path = os.path.join(data_path, os.path.splitext(mod_name)[0] + ".png")
+    if os.path.exists(mod_path):
+        os.remove(mod_path)
+    if os.path.exists(png_path):
+        os.remove(png_path)
 
 # ---------------- UI ----------------
 
@@ -119,18 +156,16 @@ def main(page: ft.Page):
         border=ft.border.all(1, "gray")
     )
 
-    active_mods_ordered = get_active_mods_set() if path_valid else []
-    active_mods_set = set(active_mods_ordered)
+    active_mods_set = get_active_mods_set() if path_valid else set()
 
     def load_mod_list(e=None):
-        nonlocal active_mods_ordered, active_mods_set
         mods_column.controls.clear()
         if not (game_path and os.path.exists(game_path)):
             page.update()
             return
 
-        active_mods_ordered = get_active_mods_set()
-        active_mods_set = set(active_mods_ordered)
+        nonlocal active_mods_set
+        active_mods_set = get_active_mods_set()
 
         mods = scan_mods(game_path)
         for mod_fname, png_path in mods:
@@ -141,18 +176,28 @@ def main(page: ft.Page):
                     active_mods_set.add(mod_name)
                 else:
                     active_mods_set.discard(mod_name)
-                image_container.content = ft.Image(src=png, fit=ft.ImageFit.CONTAIN, width=300, height=300)
+                if png and os.path.exists(png):
+                    image_container.content = ft.Image(src=png, fit=ft.ImageFit.CONTAIN, width=300, height=300)
+                else:
+                    image_container.content = None
                 page.update()
 
+            def on_delete(e, mod_name=mod_fname):
+                delete_mod(mod_name, game_path)
+                active_mods_set.discard(mod_name)
+                load_mod_list()
+
             cb = ft.Checkbox(label=mod_fname, value=checked, on_change=on_change)
-            mods_column.controls.append(cb)
+            del_btn = ft.IconButton(icon="delete", on_click=on_delete, tooltip="Удалить мод")
+            mods_column.controls.append(ft.Row(controls=[cb, del_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+
         page.update()
 
     if path_valid:
         load_mod_list()
 
     def choose_folder(e):
-        nonlocal game_path, path_valid, active_mods_ordered, active_mods_set
+        nonlocal game_path, path_valid
         new_path = select_game_folder()
         if not new_path:
             return
@@ -160,13 +205,11 @@ def main(page: ft.Page):
         save_config(game_path)
         path_valid = bool(game_path and os.path.exists(game_path))
         status.value = f"Папка с игрой ✅: {game_path}" if path_valid else "Папка с игрой не указана ❌"
-        active_mods_ordered = get_active_mods_set() if path_valid else []
-        active_mods_set = set(active_mods_ordered)
         load_mod_list()
 
     def save_changes(e):
         if not (game_path and os.path.exists(game_path)):
-            page.snack_bar = ft.SnackBar(ft.Text("Папка с игрой не указана или не существует!"))
+            page.snack_bar = ft.SnackBar(ft.Text("Папка с игрой не указана!"))
             page.snack_bar.open = True
             page.update()
             return
@@ -196,16 +239,14 @@ def main(page: ft.Page):
         page.snack_bar.open = True
         page.update()
 
-    # === ЗАПУСК ИГРЫ через CMD ===
     def launch_game(e):
         if not (game_path and os.path.exists(game_path)):
-            page.snack_bar = ft.SnackBar(ft.Text("Папка с игрой не указана или не существует!"))
+            page.snack_bar = ft.SnackBar(ft.Text("Папка с игрой не указана!"))
             page.snack_bar.open = True
             page.update()
             return
 
         exe_path = os.path.join(game_path, "Warhammer2.exe")
-
         if not os.path.exists(exe_path):
             page.snack_bar = ft.SnackBar(ft.Text(f"Файл не найден: {exe_path}"))
             page.snack_bar.open = True
@@ -213,12 +254,7 @@ def main(page: ft.Page):
             return
 
         try:
-            # Переходим в директорию игры и запускаем через start "" "<путь>"
-            subprocess.Popen(
-                f'start "" "{exe_path}"',
-                shell=True,
-                cwd=game_path
-            )
+            subprocess.Popen(f'start "" "{exe_path}"', shell=True, cwd=game_path)
             page.snack_bar = ft.SnackBar(ft.Text("Игра запущена 🎮"))
             page.snack_bar.open = True
             page.update()
@@ -227,14 +263,36 @@ def main(page: ft.Page):
             page.snack_bar.open = True
             page.update()
 
+    def add_mod_file(e):
+        if not (game_path and os.path.exists(game_path)):
+            page.snack_bar = ft.SnackBar(ft.Text("Укажите папку с игрой!"))
+            page.snack_bar.open = True
+            page.update()
+            return
+
+        root = tk.Tk()
+        root.withdraw()
+        file_path = filedialog.askopenfilename(
+            title="Выберите мод (.pack или .zip)",
+            filetypes=[("Pack файлы", "*.pack"), ("Zip архивы", "*.zip")]
+        )
+        if not file_path:
+            return
+
+        if file_path.lower().endswith(".pack"):
+            add_pack_file(file_path, game_path)
+        elif file_path.lower().endswith(".zip"):
+            add_zip_archive(file_path, game_path)
+        load_mod_list()
 
     # --- кнопки ---
     btn_save = ft.ElevatedButton("💾 Сохранить", on_click=save_changes, width=300, height=48)
     btn_refresh = ft.ElevatedButton("🔄 Обновить", on_click=refresh_action, width=300, height=48)
     btn_launch = ft.ElevatedButton("▶️ Запустить игру", on_click=launch_game, width=300, height=48)
+    btn_add_mod = ft.ElevatedButton("➕ Добавить мод", on_click=add_mod_file, width=520, height=48)
 
     buttons_column = ft.Column(
-        controls=[btn_save, btn_refresh, btn_launch],
+        controls=[btn_add_mod, btn_save, btn_refresh, btn_launch],
         spacing=12,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
@@ -270,6 +328,5 @@ def main(page: ft.Page):
 
     if path_valid:
         load_mod_list()
-
 
 ft.app(target=main)
