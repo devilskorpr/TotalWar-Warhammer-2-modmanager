@@ -2,3 +2,7 @@
 defeaultmodsscript.py
 *txt
 test.py
+*.PNG
+build
+dist
+*.spec

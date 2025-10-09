@@ -220,8 +220,9 @@ def delete_mod_files(mod_name, game_path):
 
 def main(page: ft.Page):
     page.title = "Total War: Warhammer II — Mod Manager"
-    page.window_width = 900
+    page.window.width = 900
     page.window_height = 600
+    page.window.resizable = False
     page.padding = 20
 
     game_path = load_config()
@@ -235,7 +236,7 @@ def main(page: ft.Page):
     mods_column = ft.Column(scroll="auto", expand=True, spacing=6)
 
     image_container = ft.Container(
-        content=None,
+        content=ft.Image(src="main.png", fit=ft.ImageFit.CONTAIN, width=300, height=300),
         width=300,
         height=300,
         bgcolor="black",
@@ -389,8 +390,6 @@ def main(page: ft.Page):
             return
         root = tk.Tk()
         root.withdraw()
-        root.lift()
-        root.attributes("-topmost", True)
         file_paths = filedialog.askopenfilenames(
             title="Выберите моды (.pack или .zip)",
             filetypes=[("Pack файлы", "*.pack"), ("Zip архивы", "*.zip")]
@@ -467,12 +466,12 @@ def main(page: ft.Page):
         content=mods_column,
         border=ft.border.all(1, "white"),
         padding=10,
-        width=520,
-        height=page.window_height - 160
+        width=600,
+        height=page.window_height - 70
     )
 
     left_panel = ft.Column(
-        controls=[ft.Text("Список модов:", size=16, weight="bold"), mods_container, ft.Divider(height=12)],
+        controls=[ft.Text("Список модов:", size=16, weight="bold"), mods_container],
         expand=True
     )
 
