@@ -8,3 +8,4 @@ dist
 *.spec
 *jpeg
 assets
+*exe
