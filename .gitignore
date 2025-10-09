@@ -6,3 +6,5 @@ test.py
 build
 dist
 *.spec
+*jpeg
+assets

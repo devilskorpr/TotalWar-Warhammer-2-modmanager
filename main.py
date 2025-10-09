@@ -9,7 +9,7 @@ import shutil
 import tempfile
 
 CONFIG_FILE = "config.json"
-STANDARD_PACKS_FILE = "standard_packs.txt"
+STANDARD_PACKS_FILE = "assets/standard_packs.txt"
 
 
 # ------------- helpers / file paths ---------------
@@ -225,24 +225,96 @@ def main(page: ft.Page):
     page.window.resizable = False
     page.padding = 20
 
+    # --- Переводы ---
+    translations = {
+        "ru": {
+            "title": "Total War: Warhammer II — Mod Manager",
+            "game_folder_ok": "Папка с игрой ✅: {}",
+            "game_folder_not_set": "Папка с игрой не указана ❌",
+            "choose_folder": "Выбрать папку с игрой",
+            "add_mod": "➕ Добавить мод",
+            "save": "💾 Сохранить",
+            "refresh": "🔄 Обновить",
+            "launch": "▶️ Запустить игру",
+            "mod_list": "Список модов:",
+            "mods_added": "Моды добавлены ✅",
+            "saved": "Сохранено ✅",
+            "refreshed": "Список модов обновлён 🔄",
+            "game_launched": "Игра запущена 🎮",
+            "game_not_found": "Файл не найден: {}",
+            "game_folder_not_set_short": "Папка с игрой не указана!",
+            "choose_mods": "Выберите моды (.pack или .zip)",
+            "delete_mod": "Удалить мод",
+            "move_up": "Поднять",
+            "move_down": "Опустить",
+            "backup_error": "Ошибка при создании резервной копии: {}",
+        },
+        "en": {
+            "title": "Total War: Warhammer II — Mod Manager",
+            "game_folder_ok": "Game folder ✅: {}",
+            "game_folder_not_set": "Game folder not set ❌",
+            "choose_folder": "Choose game folder",
+            "add_mod": "➕ Add mod",
+            "save": "💾 Save",
+            "refresh": "🔄 Refresh",
+            "launch": "▶️ Launch game",
+            "mod_list": "Mod list:",
+            "mods_added": "Mods added ✅",
+            "saved": "Saved ✅",
+            "refreshed": "Mod list refreshed 🔄",
+            "game_launched": "Game launched 🎮",
+            "game_not_found": "File not found: {}",
+            "game_folder_not_set_short": "Game folder not set!",
+            "choose_mods": "Choose mods (.pack or .zip)",
+            "delete_mod": "Delete mod",
+            "move_up": "Move up",
+            "move_down": "Move down",
+            "backup_error": "Error creating backup: {}",
+        }
+    }
+
+    lang = "ru"  # текущий язык
+
+    def tr(key):
+        return translations[lang][key]
+
+    # --- UI элементы ---
     game_path = load_config()
     path_valid = bool(game_path and os.path.exists(game_path))
 
     status = ft.Text(
-        f"Папка с игрой ✅: {game_path}" if path_valid else "Папка с игрой не указана ❌",
+        tr("game_folder_ok").format(game_path) if path_valid else tr("game_folder_not_set"),
         size=14
     )
 
     mods_column = ft.Column(scroll="auto", expand=True, spacing=6)
 
     image_container = ft.Container(
-        content=ft.Image(src="main.png", fit=ft.ImageFit.CONTAIN, width=300, height=300),
+        content=ft.Image(src="assets/main.png", fit=ft.ImageFit.CONTAIN, width=300, height=300),
         width=300,
         height=300,
         bgcolor="black",
         alignment=ft.alignment.center,
         border=ft.border.all(1, "gray")
     )
+
+    # --- Функция смены языка ---
+    def set_language(new_lang):
+        nonlocal lang
+        lang = new_lang
+        page.title = tr("title")
+        status.value = tr("game_folder_ok").format(game_path) if path_valid else tr("game_folder_not_set")
+        btn_add_mod.text = tr("add_mod")
+        btn_save.text = tr("save")
+        btn_refresh.text = tr("refresh")
+        btn_launch.text = tr("launch")
+        left_panel.controls[0].value = tr("mod_list")
+        btn_choose_folder.text = tr("choose_folder")
+        load_mod_list()
+        page.update()
+
+    # --- Остальные функции (load_mod_list, choose_folder, add_mod_file и т.д.) ---
+    # Везде замените строки на tr("ключ") вместо текста!
 
     def load_mod_list(e=None):
         mods_column.controls.clear()
@@ -251,12 +323,10 @@ def main(page: ft.Page):
             page.update()
             return
 
-        all_mods = scan_mods(game_path)  # list of (fname, png_or_none)
+        all_mods = scan_mods(game_path)
         mods_dict = {fname: png for fname, png in all_mods}
-
         active_order = read_active_mods_file()
 
-        # clean missing actives
         changed = False
         cleaned_active = []
         for m in active_order:
@@ -270,7 +340,7 @@ def main(page: ft.Page):
 
         active_set = set(active_order)
 
-        # Active mods block (in order)
+        # Активные моды
         for mod_name in active_order:
             png = mods_dict.get(mod_name)
 
@@ -281,10 +351,8 @@ def main(page: ft.Page):
                         if m in mods:
                             mods.remove(m)
                             write_active_mods_file(mods)
-                        # удаляем также из user.script немедленно
                         remove_mod_from_user_script(m)
                         image_container.content = None
-                        # НЕ удаляем строку из UI — просто реотрисуем: мод окажется в неактивной секции
                         load_mod_list()
                 return on_change
 
@@ -323,11 +391,9 @@ def main(page: ft.Page):
                 return f
 
             cb = ft.Checkbox(label=mod_name, value=True, on_change=make_on_change(mod_name, png))
-            up_btn = ft.IconButton(icon=ft.Icons.ARROW_UPWARD, on_click=make_move_up(mod_name), tooltip="Поднять")
-            down_btn = ft.IconButton(icon=ft.Icons.ARROW_DOWNWARD, on_click=make_move_down(mod_name), tooltip="Опустить")
-            del_btn = ft.IconButton(icon=ft.Icons.DELETE, on_click=make_delete(mod_name), tooltip="Удалить мод")
-            
-            # Группируем стрелки и урну справа
+            up_btn = ft.IconButton(icon=ft.Icons.ARROW_UPWARD, on_click=make_move_up(mod_name), tooltip=tr("move_up"))
+            down_btn = ft.IconButton(icon=ft.Icons.ARROW_DOWNWARD, on_click=make_move_down(mod_name), tooltip=tr("move_down"))
+            del_btn = ft.IconButton(icon=ft.Icons.DELETE, on_click=make_delete(mod_name), tooltip=tr("delete_mod"))
             actions_row = ft.Row(controls=[up_btn, down_btn, del_btn], spacing=2)
             mods_column.controls.append(
                 ft.Row(
@@ -336,7 +402,7 @@ def main(page: ft.Page):
                 )
             )
 
-        # Inactive mods
+        # Неактивные моды
         inactive = [name for name in mods_dict.keys() if name not in active_set]
         inactive.sort(key=lambda x: x.lower())
         for mod_name in inactive:
@@ -363,13 +429,11 @@ def main(page: ft.Page):
                 return f
 
             cb = ft.Checkbox(label=mod_name, value=False, on_change=make_on_change_inactive(mod_name, png))
-            del_btn = ft.IconButton(icon=ft.Icons.DELETE, on_click=make_delete_inactive(mod_name), tooltip="Удалить мод")
+            del_btn = ft.IconButton(icon=ft.Icons.DELETE, on_click=make_delete_inactive(mod_name), tooltip=tr("delete_mod"))
             mods_column.controls.append(ft.Row(controls=[cb, del_btn],
                                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
 
         page.update()
-
-    # UI actions
 
     def choose_folder(e):
         nonlocal game_path, path_valid
@@ -379,16 +443,15 @@ def main(page: ft.Page):
         game_path = new_path
         save_config(game_path)
         path_valid = bool(game_path and os.path.exists(game_path))
-        status.value = f"Папка с игрой ✅: {game_path}" if path_valid else "Папка с игрой не указана ❌"
+        status.value = tr("game_folder_ok").format(game_path) if path_valid else tr("game_folder_not_set")
 
-        # Создание резервной копии user.script.txt
         user_script_path = get_user_script_path()
         backup_path = os.path.join(os.path.dirname(user_script_path), "user_backup.script")
         if os.path.exists(user_script_path):
             try:
                 shutil.copy(user_script_path, backup_path)
             except Exception as ex:
-                page.snack_bar = ft.SnackBar(ft.Text(f"Ошибка при создании резервной копии: {ex}"))
+                page.snack_bar = ft.SnackBar(ft.Text(tr("backup_error").format(ex)))
                 page.snack_bar.open = True
                 page.update()
 
@@ -396,15 +459,17 @@ def main(page: ft.Page):
 
     def add_mod_file(e):
         if not (game_path and os.path.exists(game_path)):
-            page.snack_bar = ft.SnackBar(ft.Text("Укажите папку с игрой!"))
+            page.snack_bar = ft.SnackBar(ft.Text(tr("game_folder_not_set_short")))
             page.snack_bar.open = True
             page.update()
             return
         root = tk.Tk()
         root.withdraw()
+        root.lift()
+        root.attributes("-topmost", True)
         file_paths = filedialog.askopenfilenames(
-            title="Выберите моды (.pack или .zip)",
-            filetypes=[("Pack файлы", "*.pack"), ("Zip архивы", "*.zip")]
+            title=tr("choose_mods"),
+            filetypes=[("Pack files", "*.pack"), ("Zip archives", "*.zip")]
         )
         if not file_paths:
             return
@@ -414,40 +479,39 @@ def main(page: ft.Page):
             elif file_path.lower().endswith(".zip"):
                 add_zip_archive(file_path, game_path)
         load_mod_list()
-        page.snack_bar = ft.SnackBar(ft.Text("Моды добавлены ✅"))
+        page.snack_bar = ft.SnackBar(ft.Text(tr("mods_added")))
         page.snack_bar.open = True
         page.update()
 
     def save_button_action(e):
-        # Пересобираем user.script: удаляем все наши (не-стандартные) mod-строки и добавляем active_order в конце в нужном порядке
         active = read_active_mods_file()
         sync_active_into_user_script(active)
-        page.snack_bar = ft.SnackBar(ft.Text("Сохранено ✅"))
+        page.snack_bar = ft.SnackBar(ft.Text(tr("saved")))
         page.snack_bar.open = True
         page.update()
         load_mod_list()
 
     def refresh_button_action(e):
         load_mod_list()
-        page.snack_bar = ft.SnackBar(ft.Text("Список модов обновлён 🔄"))
+        page.snack_bar = ft.SnackBar(ft.Text(tr("refreshed")))
         page.snack_bar.open = True
         page.update()
 
     def launch_game(e):
         if not (game_path and os.path.exists(game_path)):
-            page.snack_bar = ft.SnackBar(ft.Text("Папка с игрой не указана!"))
+            page.snack_bar = ft.SnackBar(ft.Text(tr("game_folder_not_set_short")))
             page.snack_bar.open = True
             page.update()
             return
         exe_path = os.path.join(game_path, "Warhammer2.exe")
         if not os.path.exists(exe_path):
-            page.snack_bar = ft.SnackBar(ft.Text(f"Файл не найден: {exe_path}"))
+            page.snack_bar = ft.SnackBar(ft.Text(tr("game_not_found").format(exe_path)))
             page.snack_bar.open = True
             page.update()
             return
         try:
             subprocess.Popen(f'start "" "{exe_path}"', shell=True, cwd=game_path)
-            page.snack_bar = ft.SnackBar(ft.Text("Игра запущена 🎮"))
+            page.snack_bar = ft.SnackBar(ft.Text(tr("game_launched")))
             page.snack_bar.open = True
             page.update()
         except Exception as ex:
@@ -455,11 +519,12 @@ def main(page: ft.Page):
             page.snack_bar.open = True
             page.update()
 
-    # buttons / layout
-    btn_add_mod = ft.ElevatedButton("➕ Добавить мод", on_click=add_mod_file, width=520, height=48)
-    btn_save = ft.ElevatedButton("💾 Сохранить", on_click=save_button_action, width=300, height=48)
-    btn_refresh = ft.ElevatedButton("🔄 Обновить", on_click=refresh_button_action, width=300, height=48)
-    btn_launch = ft.ElevatedButton("▶️ Запустить игру", on_click=launch_game, width=300, height=48)
+    # --- Кнопки и layout ---
+    btn_add_mod = ft.ElevatedButton(tr("add_mod"), on_click=add_mod_file, width=520, height=48)
+    btn_save = ft.ElevatedButton(tr("save"), on_click=save_button_action, width=300, height=48)
+    btn_refresh = ft.ElevatedButton(tr("refresh"), on_click=refresh_button_action, width=300, height=48)
+    btn_launch = ft.ElevatedButton(tr("launch"), on_click=launch_game, width=300, height=48)
+    btn_choose_folder = ft.ElevatedButton(tr("choose_folder"), on_click=choose_folder)
 
     buttons_column = ft.Column(
         controls=[btn_add_mod, btn_save, btn_refresh, btn_launch],
@@ -483,12 +548,27 @@ def main(page: ft.Page):
     )
 
     left_panel = ft.Column(
-        controls=[ft.Text("Список модов:", size=16, weight="bold"), mods_container],
+        controls=[ft.Text(tr("mod_list"), size=16, weight="bold"), mods_container],
         expand=True
     )
 
+    # --- Переключатель языка ---
+    lang_row = ft.Row(
+        controls=[
+            ft.GestureDetector(
+                content=ft.Image(src="ru_flag.jpg", width=32, height=24),
+                on_tap=lambda e: set_language("ru")
+            ),
+            ft.GestureDetector(
+                content=ft.Image(src="assets/eng_flag.png", width=32, height=24),
+                on_tap=lambda e: set_language("en")
+            ),
+        ],
+        spacing=10
+    )
+
     bottom_row = ft.Row(
-        controls=[status, ft.ElevatedButton("Выбрать папку с игрой", on_click=choose_folder)],
+        controls=[status, lang_row, btn_choose_folder],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN
     )
 
@@ -496,7 +576,6 @@ def main(page: ft.Page):
     layout = ft.Column(controls=[main_row, ft.Divider(), bottom_row], expand=True)
     page.add(layout)
 
-    # initial load: ensure active_mods exists (bootstrap if needed) then load UI
     if path_valid:
         _ = read_active_mods_file()
         load_mod_list()
