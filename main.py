@@ -325,8 +325,15 @@ def main(page: ft.Page):
             up_btn = ft.IconButton(icon=ft.Icons.ARROW_UPWARD, on_click=make_move_up(mod_name), tooltip="Поднять")
             down_btn = ft.IconButton(icon=ft.Icons.ARROW_DOWNWARD, on_click=make_move_down(mod_name), tooltip="Опустить")
             del_btn = ft.IconButton(icon=ft.Icons.DELETE, on_click=make_delete(mod_name), tooltip="Удалить мод")
-            mods_column.controls.append(ft.Row(controls=[cb, up_btn, down_btn, del_btn],
-                                               alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            
+            # Группируем стрелки и урну справа
+            actions_row = ft.Row(controls=[up_btn, down_btn, del_btn], spacing=2)
+            mods_column.controls.append(
+                ft.Row(
+                    controls=[cb, actions_row],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                )
+            )
 
         # Inactive mods
         inactive = [name for name in mods_dict.keys() if name not in active_set]
@@ -382,18 +389,21 @@ def main(page: ft.Page):
             return
         root = tk.Tk()
         root.withdraw()
-        file_path = filedialog.askopenfilename(
-            title="Выберите мод (.pack или .zip)",
+        root.lift()
+        root.attributes("-topmost", True)
+        file_paths = filedialog.askopenfilenames(
+            title="Выберите моды (.pack или .zip)",
             filetypes=[("Pack файлы", "*.pack"), ("Zip архивы", "*.zip")]
         )
-        if not file_path:
+        if not file_paths:
             return
-        if file_path.lower().endswith(".pack"):
-            add_pack_file(file_path, game_path)
-        elif file_path.lower().endswith(".zip"):
-            add_zip_archive(file_path, game_path)
+        for file_path in file_paths:
+            if file_path.lower().endswith(".pack"):
+                add_pack_file(file_path, game_path)
+            elif file_path.lower().endswith(".zip"):
+                add_zip_archive(file_path, game_path)
         load_mod_list()
-        page.snack_bar = ft.SnackBar(ft.Text("Мод добавлен ✅"))
+        page.snack_bar = ft.SnackBar(ft.Text("Моды добавлены ✅"))
         page.snack_bar.open = True
         page.update()
 
