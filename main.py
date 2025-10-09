@@ -380,6 +380,18 @@ def main(page: ft.Page):
         save_config(game_path)
         path_valid = bool(game_path and os.path.exists(game_path))
         status.value = f"Папка с игрой ✅: {game_path}" if path_valid else "Папка с игрой не указана ❌"
+
+        # Создание резервной копии user.script.txt
+        user_script_path = get_user_script_path()
+        backup_path = os.path.join(os.path.dirname(user_script_path), "user_backup.script")
+        if os.path.exists(user_script_path):
+            try:
+                shutil.copy(user_script_path, backup_path)
+            except Exception as ex:
+                page.snack_bar = ft.SnackBar(ft.Text(f"Ошибка при создании резервной копии: {ex}"))
+                page.snack_bar.open = True
+                page.update()
+
         load_mod_list()
 
     def add_mod_file(e):
