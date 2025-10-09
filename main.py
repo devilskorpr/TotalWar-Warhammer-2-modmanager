@@ -27,7 +27,10 @@ def save_config(path):
 def select_game_folder():
     root = tk.Tk()
     root.withdraw()
+    root.lift()
+    root.attributes("-topmost", True)
     path = filedialog.askdirectory(title="Выберите папку с игрой Total War: Warhammer II")
+    root.destroy()
     return path if path else None
 
 def get_user_script_path():
